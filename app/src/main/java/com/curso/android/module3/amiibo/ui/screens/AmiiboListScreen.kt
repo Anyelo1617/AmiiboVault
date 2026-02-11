@@ -75,6 +75,12 @@ import com.curso.android.module3.amiibo.ui.viewmodel.AmiiboUiState
 import com.curso.android.module3.amiibo.ui.viewmodel.AmiiboViewModel
 import org.koin.androidx.compose.koinViewModel
 
+//Imports para Snackbars
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+
 /**
  * ============================================================================
  * AMIIBO LIST SCREEN - Pantalla Principal (Jetpack Compose)
@@ -146,7 +152,14 @@ fun AmiiboListScreen(
     // Estado para el dropdown del tamaño de página
     var showPageSizeDropdown by remember { mutableStateOf(false) }
 
+
+
+    // Estado para el Snackbar
+    val snackbarHostState = remember { SnackbarHostState() }
+
     Scaffold(
+        // añadimmos parametro SnackbarHost
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             /**
              * TopAppBar de Material 3.
@@ -302,7 +315,7 @@ fun AmiiboListScreen(
              * Esto mejora la UX porque:
              * - El usuario ve un icono que representa el problema
              * - Solo ve "Reintentar" cuando tiene sentido
-             */
+             *
             is AmiiboUiState.Error -> {
                 if (state.cachedAmiibos.isNotEmpty()) {
                     // Hay datos en cache: mostrar datos + mensaje de error
@@ -326,6 +339,51 @@ fun AmiiboListScreen(
                     }
                 } else {
                     // Sin cache: pantalla de error completa
+                    ErrorContent(
+                        message = state.message,
+                        errorType = state.errorType,
+                        isRetryable = state.isRetryable,
+                        onRetry = { viewModel.refreshAmiibos() },
+                        modifier = Modifier.padding(paddingValues)
+                    )
+                }
+            }*/
+            is AmiiboUiState.Error -> {
+                if (state.cachedAmiibos.isNotEmpty()) {
+                    // 1. Mostrar datos en caché (Grid)
+                    // Usamos Box para que el PullToRefresh funcione incluso en estado de error con datos
+                    Box(modifier = Modifier.padding(paddingValues)) {
+                        AmiiboGrid(
+                            amiibos = state.cachedAmiibos,
+                            onAmiiboClick = onAmiiboClick,
+                            hasMorePages = false, // Desactivamos carga infinita en error
+                            isLoadingMore = false,
+                            paginationError = null,
+                            onLoadMore = {},
+                            onRetryLoadMore = {},
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    // 2. Lanzar Snackbar (Efecto secundario)
+                    // El key es el mensaje para que si cambia el error, salga otro snackbar
+                    val errorMessage = state.message
+                    val retryLabel = stringResource(R.string.retry)
+
+                    LaunchedEffect(errorMessage) {
+                        val result = snackbarHostState.showSnackbar(
+                            message = errorMessage,
+                            actionLabel = if (state.isRetryable) retryLabel else null,
+                            duration = SnackbarDuration.Long
+                        )
+
+                        // Si el usuario pulsa "Reintentar" en el Snackbar
+                        if (result == SnackbarResult.ActionPerformed) {
+                            viewModel.refreshAmiibos()
+                        }
+                    }
+                } else {
+                    // Se mantiene igual
                     ErrorContent(
                         message = state.message,
                         errorType = state.errorType,
@@ -455,9 +513,10 @@ private fun ErrorType.toIcon(): ImageVector = when (this) {
  * Útil cuando hay error pero tenemos datos en cache.
  * Muestra un icono pequeño según el tipo de error.
  *
- * @param errorType Tipo de error para mostrar icono apropiado
- * @param isRetryable Si true, muestra botón de reintentar
+ * @param //errorType Tipo de error para mostrar icono apropiado
+ * @param //isRetryable Si true, muestra botón de reintentar
  */
+/*
 @Composable
 private fun ErrorBanner(
     message: String,
@@ -505,7 +564,7 @@ private fun ErrorBanner(
         }
     }
 }
-
+*/
 /**
  * Grid de Amiibos con soporte para paginación infinita.
  *
@@ -884,7 +943,7 @@ private fun AmiiboCard(
  *                    imageUrl = "https://example.com/mario.png"
  *                )
  *            )
- *        }
+ *
  *    }
  *    ```
  *

@@ -263,8 +263,7 @@ class AmiiboViewModel(
                 if (amiibos.isNotEmpty()) {
                     _uiState.value = AmiiboUiState.Success(
                         amiibos = amiibos,
-                        isRefreshing = currentState is AmiiboUiState.Success &&
-                                (currentState as? AmiiboUiState.Success)?.isRefreshing == true
+                        isRefreshing = currentState is AmiiboUiState.Success && currentState.isRefreshing
                     )
                 }
             }
@@ -345,7 +344,7 @@ class AmiiboViewModel(
 
                 if (newItems.isNotEmpty()) {
                     _currentPage.value = nextPage
-                    _loadedAmiibos.value = _loadedAmiibos.value + newItems
+                    _loadedAmiibos.value += newItems
                     _hasMorePages.value = repository.hasMorePages(nextPage, _pageSize.value)
 
                     _uiState.value = AmiiboUiState.Success(
@@ -445,7 +444,11 @@ class AmiiboViewModel(
                  * - Si es del servidor (Parse) → esperar y reintentar después
                  * - Si es local (Database) → reiniciar app o liberar espacio
                  */
-                val cachedAmiibos = _loadedAmiibos.value
+
+                // Obtenemos el estado actual antes de emitir el error
+                val currentState = _uiState.value
+                val cachedAmiibos = (currentState as? AmiiboUiState.Success)?.amiibos ?: _loadedAmiibos.value
+
                 val errorType = ErrorType.from(e)
 
                 // Determinar si el error es recuperable con un reintento
@@ -464,7 +467,11 @@ class AmiiboViewModel(
                 )
             } catch (e: Exception) {
                 // Catch-all para errores no tipados (no debería llegar aquí)
-                val cachedAmiibos = _loadedAmiibos.value
+
+                //Intentamos recuperar los datos visuales actuales (del Success) o usar la lista interna
+                val currentState = _uiState.value
+                val cachedAmiibos = (currentState as? AmiiboUiState.Success)?.amiibos ?: _loadedAmiibos.value
+
                 _uiState.value = AmiiboUiState.Error(
                     message = e.message ?: "Error desconocido al cargar datos",
                     errorType = ErrorType.UNKNOWN,
