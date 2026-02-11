@@ -81,6 +81,20 @@ class AmiiboRepository(
 
     /**
      * =========================================================================
+     * BUSCAR AMIIBOS (LOCAL)
+     * =========================================================================
+     *
+     * Retorna un Flow con los Amiibos filtrados por nombre.
+     * La búsqueda se realiza directamente en la base de datos (Room).
+     *
+     * @param query Texto a buscar
+     */
+    fun searchAmiibos(query: String): Flow<List<AmiiboEntity>> {
+        return amiiboDao.searchAmiibos(query)
+    }
+
+    /**
+     * =========================================================================
      * REFRESCAR AMIIBOS (SINCRONIZACIÓN)
      * =========================================================================
      *

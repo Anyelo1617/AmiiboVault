@@ -1,5 +1,11 @@
 package com.curso.android.module3.amiibo.ui.viewmodel
 
+//Nuevos imports
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.flatMapLatest
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.curso.android.module3.amiibo.data.local.entity.AmiiboEntity
@@ -153,6 +159,10 @@ class AmiiboViewModel(
      */
     private val _uiState = MutableStateFlow<AmiiboUiState>(AmiiboUiState.Loading)
 
+    //BÚSQUEDA LOCAL
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
     /**
      * Estado público inmutable para la UI.
      *
@@ -225,7 +235,7 @@ class AmiiboViewModel(
      * - SharingStarted.WhileSubscribed(5000): Mantiene activo 5s después
      *   de que el último suscriptor se va (optimización para rotación)
      * - emptyList(): Valor inicial mientras se carga
-     */
+     *
     private val amiibosFromDb: StateFlow<List<AmiiboEntity>> = repository
         .observeAmiibos()
         .stateIn(
@@ -233,6 +243,42 @@ class AmiiboViewModel(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList()
         )
+     */
+
+    /**
+     * =========================================================================
+     * BÚSQUEDA LOCAL
+     * =========================================================================
+     */
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    /**
+     * Flow reactivo que alterna automáticamente entre la lista completa y la búsqueda.
+     *
+     * USAMOS FLATMAPLATEST:
+     * 1. Observa cambios en _searchQuery
+     * 2. Si cambia, CANCELA el flujo anterior
+     * 3. Crea un NUEVO flujo basado en el query (todos vs búsqueda)
+     *
+     * Debounce(300ms): Espera a que el usuario deje de escribir para buscar.
+     */
+    @OptIn(kotlinx.coroutines.FlowPreview::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val amiibosFromDb: StateFlow<List<AmiiboEntity>> = _searchQuery
+        .debounce(300L) // Espera 300ms de inactividad
+        .flatMapLatest { query ->
+            if (query.isBlank()) {
+                repository.observeAmiibos()
+            } else {
+                repository.searchAmiibos(query)
+            }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList()
+        )
+
 
     /**
      * Inicialización del ViewModel.
@@ -527,3 +573,11 @@ class AmiiboViewModel(
  *
  * ============================================================================
  */
+
+fun updateSearchQuery(query: String) {
+    _searchQuery.value = query
+}
+
+fun clearSearch() {
+    _searchQuery.value = ""
+}

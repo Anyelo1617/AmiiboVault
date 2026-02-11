@@ -148,6 +148,23 @@ interface AmiiboDao {
 
     /**
      * =========================================================================
+     * BUSQUEDA: Filtrar Amiibos por nombre
+     * =========================================================================
+     * @param query Texto a buscar dentro del nombre
+     * @return Flow con la lista de amiibos que coinciden
+
+     * SQL:
+     * - LIKE: Operador de comparación de patrones
+     * - '%' || :query || '%': Concatena comodines antes y después
+     * - 'Mar' -> '%Mar%' (busca "Mario", "Omar", "Market", etc.)
+     * - COLLATE NOCASE: Hace la búsqueda insensible a mayúsculas/minúsculas
+     * - "mario" encuentra "Mario"
+     */
+    @Query("SELECT * FROM amiibos WHERE name LIKE '%' || :query || '%' ORDER BY name ASC")
+    fun searchAmiibos(query: String): Flow<List<AmiiboEntity>>
+
+    /**
+     * =========================================================================
      * QUERY: Obtener Amiibos paginados
      * =========================================================================
      *
