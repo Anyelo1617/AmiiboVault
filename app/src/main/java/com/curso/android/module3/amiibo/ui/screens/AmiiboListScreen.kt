@@ -23,10 +23,12 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -40,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -59,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -66,7 +70,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.ui.graphics.vector.ImageVector
 import coil3.compose.AsyncImage
 import com.curso.android.module3.amiibo.R
 import com.curso.android.module3.amiibo.data.local.entity.AmiiboEntity
@@ -74,8 +77,6 @@ import com.curso.android.module3.amiibo.domain.error.ErrorType
 import com.curso.android.module3.amiibo.ui.viewmodel.AmiiboUiState
 import com.curso.android.module3.amiibo.ui.viewmodel.AmiiboViewModel
 import org.koin.androidx.compose.koinViewModel
-
-//Imports para Snackbars
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -83,49 +84,23 @@ import androidx.compose.material3.SnackbarResult
 
 /**
  * ============================================================================
- * AMIIBO LIST SCREEN - Pantalla Principal (Jetpack Compose)
+ *  PART 1 & 2: PANTALLA COMPLETA CON OFFLINE MODE Y BÚSQUEDA LOCAL
  * ============================================================================
  *
- * Esta pantalla muestra la colección de Amiibos en un grid de 2 columnas.
- * Implementa el patrón de UI reactiva con:
- * - StateFlow para el estado
- * - when exhaustivo para manejar todos los estados
- * - Coil para carga asíncrona de imágenes
+ * CAMBIOS IMPLEMENTADOS:
+ * ---------------------
+ * ✅ PART 1: Graceful Offline Mode
+ *    - Snackbar para errores con datos cacheados
+ *    - Grid visible incluso con error
+ *    - Botón "Retry" en Snackbar
  *
- * ESTRUCTURA DE LA UI:
- * --------------------
- *
- *   ┌─────────────────────────────────────────┐
- *   │           TOP APP BAR                   │
- *   │  [Amiibo Vault]              [Refresh]  │
- *   ├─────────────────────────────────────────┤
- *   │                                         │
- *   │   ┌─────────┐    ┌─────────┐           │
- *   │   │  IMG    │    │  IMG    │           │
- *   │   │         │    │         │           │
- *   │   │  Name   │    │  Name   │           │
- *   │   │  Series │    │  Series │           │
- *   │   └─────────┘    └─────────┘           │
- *   │                                         │
- *   │   ┌─────────┐    ┌─────────┐           │
- *   │   │  IMG    │    │  IMG    │           │
- *   │   │  ...    │    │  ...    │           │
- *   │                                         │
- *   └─────────────────────────────────────────┘
+ * ✅ PART 2: Local Search
+ *    - TextField de búsqueda en la parte superior
+ *    - Icono de clear (X) cuando hay texto
+ *    - Búsqueda reactiva con debounce (300ms)
+ *    - Usa Room query, no filtrado en memoria
  *
  * ============================================================================
- */
-
-/**
- * Pantalla principal que muestra la lista de Amiibos.
- *
- * @OptIn(ExperimentalMaterial3Api::class):
- * - TopAppBar es experimental en Material3
- * - Requerido por las especificaciones del proyecto
- *
- * @param viewModel ViewModel inyectado por Koin
- *   - koinViewModel() busca el ViewModel en el contenedor de Koin
- *   - Equivalente a by viewModel() pero para Compose
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -133,42 +108,23 @@ fun AmiiboListScreen(
     onAmiiboClick: (String) -> Unit = {},
     viewModel: AmiiboViewModel = koinViewModel()
 ) {
-    /**
-     * collectAsStateWithLifecycle():
-     * - Convierte StateFlow a State de Compose
-     * - Respeta el lifecycle (pausa colección cuando la UI no es visible)
-     * - Más eficiente que collectAsState() normal
-     *
-     * 'by' es delegación de propiedades:
-     * - uiState se comporta como AmiiboUiState directamente
-     * - Sin 'by' sería: uiState.value para acceder
-     */
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val pageSize by viewModel.pageSize.collectAsStateWithLifecycle()
     val hasMorePages by viewModel.hasMorePages.collectAsStateWithLifecycle()
     val isLoadingMore by viewModel.isLoadingMore.collectAsStateWithLifecycle()
     val paginationError by viewModel.paginationError.collectAsStateWithLifecycle()
 
-    // Estado para el dropdown del tamaño de página
+    // Estado de búsqueda
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+
     var showPageSizeDropdown by remember { mutableStateOf(false) }
 
-
-
-    // Estado para el Snackbar
+    // Snackbar state
     val snackbarHostState = remember { SnackbarHostState() }
 
     Scaffold(
-        // añadimmos parametro SnackbarHost
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
-            /**
-             * TopAppBar de Material 3.
-             *
-             * Componentes:
-             * - title: Título de la app
-             * - actions: Selector de límite + botón refresh
-             * - colors: Esquema de colores personalizado
-             */
             TopAppBar(
                 title = {
                     Text(
@@ -177,14 +133,7 @@ fun AmiiboListScreen(
                     )
                 },
                 actions = {
-                    /**
-                     * CONCEPTO: Dropdown para seleccionar tamaño de página
-                     *
-                     * Box envuelve el botón y el menú para posicionar
-                     * correctamente el dropdown debajo del botón.
-                     */
                     Box {
-                        // Botón que muestra el tamaño de página actual
                         TextButton(
                             onClick = { showPageSizeDropdown = true }
                         ) {
@@ -200,7 +149,6 @@ fun AmiiboListScreen(
                             )
                         }
 
-                        // Menú desplegable con opciones
                         DropdownMenu(
                             expanded = showPageSizeDropdown,
                             onDismissRequest = { showPageSizeDropdown = false }
@@ -220,7 +168,6 @@ fun AmiiboListScreen(
                         }
                     }
 
-                    // Botón de refresh
                     IconButton(onClick = { viewModel.refreshAmiibos() }) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
@@ -235,162 +182,86 @@ fun AmiiboListScreen(
             )
         }
     ) { paddingValues ->
-        /**
-         * =====================================================================
-         * MANEJO DE ESTADOS CON WHEN EXHAUSTIVO
-         * =====================================================================
-         *
-         * when sobre sealed interface garantiza que manejemos TODOS los casos.
-         * Si agregas un nuevo estado al sealed interface, el compilador
-         * te obligará a manejarlo aquí.
-         *
-         * Esto elimina errores comunes como:
-         * - Olvidar manejar el estado de error
-         * - Estados inconsistentes (loading + error al mismo tiempo)
-         */
-        when (val state = uiState) {
-            // Estado de carga inicial
-            is AmiiboUiState.Loading -> {
-                LoadingContent(
-                    modifier = Modifier.padding(paddingValues)
-                )
-            }
+        // Column para incluir TextField + contenido
+        Column(modifier = Modifier.padding(paddingValues)) {
+            SearchTextField(
+                query = searchQuery,
+                onQueryChange = { viewModel.updateSearchQuery(it) },
+                onClear = { viewModel.clearSearch() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            )
 
-            // Estado de éxito con datos
-            is AmiiboUiState.Success -> {
-                /**
-                 * =====================================================================
-                 * PULL-TO-REFRESH (Material 3)
-                 * =====================================================================
-                 *
-                 * PullToRefreshBox es el componente oficial de Material 3 para
-                 * implementar el patrón "pull-to-refresh" (deslizar hacia abajo
-                 * para actualizar).
-                 *
-                 * CONCEPTO: Pull-to-Refresh
-                 * -------------------------
-                 * Es un patrón de UX muy común en apps móviles que permite al
-                 * usuario actualizar el contenido deslizando hacia abajo desde
-                 * la parte superior de la lista.
-                 *
-                 * Parámetros clave:
-                 * - isRefreshing: Controla si se muestra el indicador de carga
-                 * - onRefresh: Callback que se ejecuta cuando el usuario "suelta"
-                 *
-                 * VENTAJAS sobre LinearProgressIndicator manual:
-                 * 1. Animación nativa del sistema (familiar para el usuario)
-                 * 2. Gesture handling automático
-                 * 3. Integración con el scroll del contenido
-                 *
-                 * NOTA: Requiere @OptIn(ExperimentalMaterial3Api::class)
-                 */
-                PullToRefreshBox(
-                    isRefreshing = state.isRefreshing,
-                    onRefresh = { viewModel.refreshAmiibos() },
-                    modifier = Modifier.padding(paddingValues)
-                ) {
-                    // Grid de Amiibos con paginación
-                    AmiiboGrid(
-                        amiibos = state.amiibos,
-                        onAmiiboClick = onAmiiboClick,
-                        hasMorePages = hasMorePages,
-                        isLoadingMore = isLoadingMore,
-                        paginationError = paginationError,
-                        onLoadMore = { viewModel.loadNextPage() },
-                        onRetryLoadMore = { viewModel.retryLoadMore() },
+            // Contenido según el estado
+            when (val state = uiState) {
+                is AmiiboUiState.Loading -> {
+                    LoadingContent(
                         modifier = Modifier.fillMaxSize()
                     )
                 }
-            }
 
-            /**
-             * Estado de error con tipo específico.
-             *
-             * CONCEPTO: Errores Tipados en UI
-             * -------------------------------
-             * El estado de error ahora incluye:
-             * - errorType: Para mostrar iconos apropiados
-             * - isRetryable: Para decidir si mostrar botón de reintentar
-             *
-             * Esto mejora la UX porque:
-             * - El usuario ve un icono que representa el problema
-             * - Solo ve "Reintentar" cuando tiene sentido
-             *
-            is AmiiboUiState.Error -> {
-                if (state.cachedAmiibos.isNotEmpty()) {
-                    // Hay datos en cache: mostrar datos + mensaje de error
-                    Column(modifier = Modifier.padding(paddingValues)) {
-                        ErrorBanner(
+                is AmiiboUiState.Success -> {
+                    PullToRefreshBox(
+                        isRefreshing = state.isRefreshing,
+                        onRefresh = { viewModel.refreshAmiibos() },
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        AmiiboGrid(
+                            amiibos = state.amiibos,
+                            onAmiiboClick = onAmiiboClick,
+                            hasMorePages = hasMorePages,
+                            isLoadingMore = isLoadingMore,
+                            paginationError = paginationError,
+                            onLoadMore = { viewModel.loadNextPage() },
+                            onRetryLoadMore = { viewModel.retryLoadMore() },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+
+                // GRACEFUL ERROR HANDLING
+                is AmiiboUiState.Error -> {
+                    if (state.cachedAmiibos.isNotEmpty()) {
+                        // HAY CACHE: Mostrar grid + Snackbar
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            AmiiboGrid(
+                                amiibos = state.cachedAmiibos,
+                                onAmiiboClick = onAmiiboClick,
+                                hasMorePages = false,
+                                isLoadingMore = false,
+                                paginationError = null,
+                                onLoadMore = {},
+                                onRetryLoadMore = {},
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+
+                        // Mostramos el Snackbar con retry
+                        val errorMessage = state.message
+                        val retryLabel = stringResource(R.string.retry)
+
+                        LaunchedEffect(errorMessage) {
+                            val result = snackbarHostState.showSnackbar(
+                                message = errorMessage,
+                                actionLabel = if (state.isRetryable) retryLabel else null,
+                                duration = SnackbarDuration.Long
+                            )
+
+                            if (result == SnackbarResult.ActionPerformed) {
+                                viewModel.refreshAmiibos()
+                            }
+                        }
+                    } else {
+                        // SIN CACHE: Pantalla completa de error
+                        ErrorContent(
                             message = state.message,
                             errorType = state.errorType,
                             isRetryable = state.isRetryable,
-                            onRetry = { viewModel.refreshAmiibos() }
-                        )
-                        AmiiboGrid(
-                            amiibos = state.cachedAmiibos,
-                            onAmiiboClick = onAmiiboClick,
-                            hasMorePages = false,
-                            isLoadingMore = false,
-                            paginationError = null,
-                            onLoadMore = {},
-                            onRetryLoadMore = {},
+                            onRetry = { viewModel.refreshAmiibos() },
                             modifier = Modifier.fillMaxSize()
                         )
                     }
-                } else {
-                    // Sin cache: pantalla de error completa
-                    ErrorContent(
-                        message = state.message,
-                        errorType = state.errorType,
-                        isRetryable = state.isRetryable,
-                        onRetry = { viewModel.refreshAmiibos() },
-                        modifier = Modifier.padding(paddingValues)
-                    )
-                }
-            }*/
-            is AmiiboUiState.Error -> {
-                if (state.cachedAmiibos.isNotEmpty()) {
-                    // 1. Mostrar datos en caché (Grid)
-                    // Usamos Box para que el PullToRefresh funcione incluso en estado de error con datos
-                    Box(modifier = Modifier.padding(paddingValues)) {
-                        AmiiboGrid(
-                            amiibos = state.cachedAmiibos,
-                            onAmiiboClick = onAmiiboClick,
-                            hasMorePages = false, // Desactivamos carga infinita en error
-                            isLoadingMore = false,
-                            paginationError = null,
-                            onLoadMore = {},
-                            onRetryLoadMore = {},
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-
-                    // 2. Lanzar Snackbar (Efecto secundario)
-                    // El key es el mensaje para que si cambia el error, salga otro snackbar
-                    val errorMessage = state.message
-                    val retryLabel = stringResource(R.string.retry)
-
-                    LaunchedEffect(errorMessage) {
-                        val result = snackbarHostState.showSnackbar(
-                            message = errorMessage,
-                            actionLabel = if (state.isRetryable) retryLabel else null,
-                            duration = SnackbarDuration.Long
-                        )
-
-                        // Si el usuario pulsa "Reintentar" en el Snackbar
-                        if (result == SnackbarResult.ActionPerformed) {
-                            viewModel.refreshAmiibos()
-                        }
-                    }
-                } else {
-                    // Se mantiene igual
-                    ErrorContent(
-                        message = state.message,
-                        errorType = state.errorType,
-                        isRetryable = state.isRetryable,
-                        onRetry = { viewModel.refreshAmiibos() },
-                        modifier = Modifier.padding(paddingValues)
-                    )
                 }
             }
         }
@@ -398,18 +269,68 @@ fun AmiiboListScreen(
 }
 
 /**
- * ============================================================================
- * COMPONENTES DE UI REUTILIZABLES
- * ============================================================================
+ * ==============================
+ * SEARCH TEXT FIELD COMPONENT
+ * ==============================
+ *
+ * TextField de búsqueda con:
+ * - Icono de búsqueda al inicio
+ * - Icono de clear (X) al final (solo visible cuando hay texto)
+ * - Placeholder text
  */
+@Composable
+private fun SearchTextField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = modifier,
+        placeholder = {
+            Text(
+                text = "Buscar Amiibos...",
+                style = MaterialTheme.typography.bodyLarge
+            )
+        },
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = "Buscar",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        trailingIcon = {
+            //Clear button (X) (solo visible cuando hay texto)
+            if (query.isNotEmpty()) {
+                IconButton(onClick = onClear) {
+                    Icon(
+                        imageVector = Icons.Default.Clear,
+                        contentDescription = "Limpiar búsqueda",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        singleLine = true,
+        shape = RoundedCornerShape(28.dp),
+        colors = androidx.compose.material3.TextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent
+        )
+    )
+}
 
 /**
- * Contenido mostrado durante la carga inicial.
- *
- * CircularProgressIndicator:
- * - Indicador de progreso indeterminado
- * - Material 3 style
+ * ================================
+ * COMPOSABLES
+ * ==================================
  */
+
 @Composable
 private fun LoadingContent(modifier: Modifier = Modifier) {
     Box(
@@ -432,19 +353,6 @@ private fun LoadingContent(modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * Contenido mostrado cuando hay error y no hay cache.
- *
- * CONCEPTO: Iconos por Tipo de Error
- * ----------------------------------
- * Cada tipo de error muestra un icono diferente para comunicar
- * visualmente la naturaleza del problema al usuario.
- *
- * @param message Mensaje de error
- * @param errorType Tipo de error para mostrar icono apropiado
- * @param isRetryable Si true, muestra botón de reintentar
- * @param onRetry Callback para reintentar
- */
 @Composable
 private fun ErrorContent(
     message: String,
@@ -462,7 +370,6 @@ private fun ErrorContent(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.padding(32.dp)
         ) {
-            // Icono según el tipo de error
             Icon(
                 imageVector = errorType.toIcon(),
                 contentDescription = null,
@@ -482,7 +389,6 @@ private fun ErrorContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            // Solo mostrar botón si el error es recuperable
             if (isRetryable) {
                 Button(onClick = onRetry) {
                     Text(text = stringResource(R.string.retry))
@@ -492,100 +398,13 @@ private fun ErrorContent(
     }
 }
 
-/**
- * Función de extensión para obtener el icono según el tipo de error.
- *
- * CONCEPTO: Extension Functions
- * ----------------------------
- * Las funciones de extensión permiten agregar métodos a clases
- * existentes sin modificarlas. Aquí agregamos toIcon() a ErrorType.
- */
 private fun ErrorType.toIcon(): ImageVector = when (this) {
-    ErrorType.NETWORK -> Icons.Default.CloudOff   // Sin conexión
-    ErrorType.PARSE -> Icons.Default.Warning      // Error de datos
-    ErrorType.DATABASE -> Icons.Default.Storage   // Error de BD
-    ErrorType.UNKNOWN -> Icons.Default.Error      // Error genérico
+    ErrorType.NETWORK -> Icons.Default.CloudOff
+    ErrorType.PARSE -> Icons.Default.Warning
+    ErrorType.DATABASE -> Icons.Default.Storage
+    ErrorType.UNKNOWN -> Icons.Default.Error
 }
 
-/**
- * Banner de error mostrado sobre contenido existente.
- *
- * Útil cuando hay error pero tenemos datos en cache.
- * Muestra un icono pequeño según el tipo de error.
- *
- * @param //errorType Tipo de error para mostrar icono apropiado
- * @param //isRetryable Si true, muestra botón de reintentar
- */
-/*
-@Composable
-private fun ErrorBanner(
-    message: String,
-    errorType: ErrorType,
-    isRetryable: Boolean,
-    onRetry: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(8.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Icono pequeño según el tipo de error
-            Icon(
-                imageVector = errorType.toIcon(),
-                contentDescription = null,
-                modifier = Modifier.size(24.dp),
-                tint = MaterialTheme.colorScheme.onErrorContainer
-            )
-
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onErrorContainer,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-
-            // Solo mostrar botón si el error es recuperable
-            if (isRetryable) {
-                Button(
-                    onClick = onRetry,
-                    modifier = Modifier.padding(top = 8.dp)
-                ) {
-                    Text(text = stringResource(R.string.retry))
-                }
-            }
-        }
-    }
-}
-*/
-/**
- * Grid de Amiibos con soporte para paginación infinita.
- *
- * CONCEPTO: Infinite Scroll / Pagination
- * --------------------------------------
- * La paginación infinita carga más contenido cuando el usuario
- * se acerca al final de la lista. Esto mejora el rendimiento
- * al no cargar todos los datos de una vez.
- *
- * Implementación:
- * 1. Detectamos cuando el usuario está cerca del final (derivedStateOf)
- * 2. Llamamos a onLoadMore() para cargar la siguiente página
- * 3. Mostramos un indicador de carga o botón de reintentar al final
- *
- * @param amiibos Lista de Amiibos a mostrar
- * @param hasMorePages Indica si hay más páginas por cargar
- * @param isLoadingMore Indica si está cargando la siguiente página
- * @param paginationError Mensaje de error si falló la carga (null si no hay error)
- * @param onLoadMore Callback para cargar más items
- * @param onRetryLoadMore Callback para reintentar carga después de error
- */
 @Composable
 private fun AmiiboGrid(
     amiibos: List<AmiiboEntity>,
@@ -599,47 +418,12 @@ private fun AmiiboGrid(
 ) {
     val gridState = rememberLazyGridState()
 
-    /**
-     * =========================================================================
-     * DERIVEDSTATEOF - Optimización de Compose
-     * =========================================================================
-     *
-     * CONCEPTO: derivedStateOf vs LaunchedEffect
-     * ------------------------------------------
-     * Antes usábamos LaunchedEffect para detectar el scroll:
-     * ```kotlin
-     * LaunchedEffect(gridState.firstVisibleItemIndex, amiibos.size) {
-     *     // Calcular si debemos cargar más...
-     * }
-     * ```
-     *
-     * PROBLEMA con LaunchedEffect:
-     * - Se ejecuta en CADA cambio de firstVisibleItemIndex
-     * - Incluso si el resultado del cálculo no cambia
-     * - Genera recomposiciones innecesarias
-     *
-     * SOLUCIÓN con derivedStateOf:
-     * - Solo notifica cuando el RESULTADO del cálculo cambia
-     * - Más eficiente para valores derivados de otros estados
-     * - Patrón recomendado para cálculos basados en scroll
-     *
-     * CUÁNDO USAR CADA UNO:
-     * - derivedStateOf: Cuando necesitas un valor DERIVADO de otro estado
-     *   y solo te importa cuando el resultado cambia
-     * - LaunchedEffect: Cuando necesitas ejecutar efectos secundarios
-     *   (llamadas a APIs, navegación, etc.)
-     *
-     * En este caso, shouldLoadMore es un Boolean derivado del estado del grid.
-     * Solo nos importa cuando cambia de false a true.
-     */
     val shouldLoadMore by remember {
         derivedStateOf {
             val layoutInfo = gridState.layoutInfo
             val totalItems = layoutInfo.totalItemsCount
             val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
 
-            // Condición: estamos a 6 items del final Y hay más páginas
-            // Y no estamos cargando Y no hay error pendiente
             lastVisibleItem >= totalItems - 6 &&
                     hasMorePages &&
                     !isLoadingMore &&
@@ -648,10 +432,6 @@ private fun AmiiboGrid(
         }
     }
 
-    /**
-     * LaunchedEffect SOLO se ejecuta cuando shouldLoadMore cambia a true.
-     * Esto es mucho más eficiente que observar firstVisibleItemIndex directamente.
-     */
     LaunchedEffect(shouldLoadMore) {
         if (shouldLoadMore) {
             onLoadMore()
@@ -666,7 +446,6 @@ private fun AmiiboGrid(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Items de Amiibos
         items(
             items = amiibos,
             key = { it.id }
@@ -677,7 +456,6 @@ private fun AmiiboGrid(
             )
         }
 
-        // Indicador de carga al final (ocupa 2 columnas)
         if (isLoadingMore) {
             item(span = { GridItemSpan(2) }) {
                 Box(
@@ -693,24 +471,6 @@ private fun AmiiboGrid(
             }
         }
 
-        /**
-         * =====================================================================
-         * ERROR DE PAGINACIÓN CON BOTÓN DE REINTENTAR
-         * =====================================================================
-         *
-         * CONCEPTO: Errores Inline en Infinite Scroll
-         * -------------------------------------------
-         * Cuando falla la carga de más items, NO queremos:
-         * - Mostrar una pantalla de error completa (perdemos los datos)
-         * - Ignorar el error silenciosamente (mala UX)
-         *
-         * En su lugar, mostramos un componente inline al final de la lista
-         * que permite al usuario:
-         * 1. Ver que hubo un error
-         * 2. Reintentar la carga sin perder su posición de scroll
-         *
-         * Este patrón es usado por apps como Twitter, Instagram, Reddit, etc.
-         */
         if (paginationError != null) {
             item(span = { GridItemSpan(2) }) {
                 PaginationErrorItem(
@@ -720,7 +480,6 @@ private fun AmiiboGrid(
             }
         }
 
-        // Mensaje cuando no hay más páginas
         if (!hasMorePages && amiibos.isNotEmpty() && paginationError == null) {
             item(span = { GridItemSpan(2) }) {
                 Text(
@@ -737,22 +496,6 @@ private fun AmiiboGrid(
     }
 }
 
-/**
- * ============================================================================
- * COMPONENTE: Error de Paginación Inline
- * ============================================================================
- *
- * Muestra un mensaje de error y botón de reintentar al final de la lista
- * cuando falla la carga de más items.
- *
- * DISEÑO:
- * - Card con color de error suave
- * - Icono + mensaje + botón en layout horizontal compacto
- * - Botón outlined para diferenciarlo del botón principal
- *
- * @param errorMessage Mensaje de error a mostrar
- * @param onRetry Callback cuando el usuario presiona "Reintentar"
- */
 @Composable
 private fun PaginationErrorItem(
     errorMessage: String,
@@ -775,7 +518,6 @@ private fun PaginationErrorItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icono y mensaje
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
@@ -798,7 +540,6 @@ private fun PaginationErrorItem(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // Botón de reintentar
             OutlinedButton(
                 onClick = onRetry,
                 modifier = Modifier.height(36.dp)
@@ -818,13 +559,6 @@ private fun PaginationErrorItem(
     }
 }
 
-/**
- * Card individual para mostrar un Amiibo.
- *
- * Usa AsyncImage de Coil para cargar imágenes de forma asíncrona.
- *
- * @param amiibo Datos del Amiibo a mostrar
- */
 @Composable
 private fun AmiiboCard(
     amiibo: AmiiboEntity,
@@ -846,7 +580,6 @@ private fun AmiiboCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Imagen con fondo degradado
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -874,7 +607,6 @@ private fun AmiiboCard(
                     )
                 }
 
-                // Información del Amiibo
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -884,7 +616,6 @@ private fun AmiiboCard(
                         modifier = Modifier.padding(12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // Nombre del Amiibo
                         Text(
                             text = amiibo.name,
                             style = MaterialTheme.typography.titleMedium,
@@ -896,7 +627,6 @@ private fun AmiiboCard(
                             modifier = Modifier.fillMaxWidth()
                         )
 
-                        // Chip con la serie del juego
                         Surface(
                             modifier = Modifier.padding(top = 6.dp),
                             shape = RoundedCornerShape(12.dp),
@@ -918,44 +648,3 @@ private fun AmiiboCard(
         }
     }
 }
-
-/**
- * ============================================================================
- * NOTAS ADICIONALES SOBRE COMPOSE
- * ============================================================================
- *
- * 1. RECOMPOSICIÓN:
- *    - Compose solo recompone lo que cambia
- *    - Usar 'key' en listas para optimizar
- *    - remember {} para cachear valores entre recomposiciones
- *
- * 2. PREVIEWS:
- *    ```kotlin
- *    @Preview(showBackground = true)
- *    @Composable
- *    fun AmiiboCardPreview() {
- *        AmiiboVaultTheme {
- *            AmiiboCard(
- *                amiibo = AmiiboEntity(
- *                    id = "1",
- *                    name = "Mario",
- *                    gameSeries = "Super Mario",
- *                    imageUrl = "https://example.com/mario.png"
- *                )
- *            )
- *
- *    }
- *    ```
- *
- * 3. PULL TO REFRESH (requiere material3 + material):
- *    ```kotlin
- *    PullToRefreshBox(
- *        isRefreshing = state.isRefreshing,
- *        onRefresh = { viewModel.refreshAmiibos() }
- *    ) {
- *        AmiiboGrid(...)
- *    }
- *    ```
- *
- * ============================================================================
- */
