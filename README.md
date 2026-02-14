@@ -82,7 +82,7 @@ Una aplicación completa para explorar la colección de Amiibos de Nintendo, dis
 ### **Instalación**
 1. Clonar el repositorio:
 ```bash
-   git clone [URL_DEL_REPO]
+   git clone https://github.com/Anyelo1617/AmiiboVault.git
 ```
 
 2. Abrir el proyecto en Android Studio
