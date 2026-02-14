@@ -20,9 +20,13 @@ Este repositorio contiene una aplicación de catálogo de Amiibos desarrollada c
 
 Una aplicación completa para explorar la colección de Amiibos de Nintendo, diseñada para funcionar sin conexión a internet mediante un sistema de caché inteligente.
 
-### [SCREENSHOT: Pantalla principal con grid de Amiibos]
+<p align="center">
+  <img src="assets/Screenshot_Home.jpeg" width="300" alt="Home Screen">
+  <img src="assets/Screenshot_Link.jpeg" width="300" alt="Home Screen">
+</p>
 
 ---
+
 
 ## ⭐ Características Principales
 
@@ -34,7 +38,10 @@ Una aplicación completa para explorar la colección de Amiibos de Nintendo, dis
 * **Retry Funcional:** Botón "Reintentar" en Snackbar para refrescar datos sin perder la vista actual
 * **Errores Tipados:** Distinción clara entre errores de red, parsing, base de datos y desconocidos
 
-### [SCREENSHOT: Snackbar con error + Grid visible]
+<p align="center">
+  <img src="assets/screenshot_snackbar_grid.jpeg" width="300" alt="Home Screen">
+</p>
+
 
 ### **Part 2: Local Search** 🔍
 * **Búsqueda en Tiempo Real:** TextField con debounce de 300ms para optimizar consultas
@@ -42,7 +49,10 @@ Una aplicación completa para explorar la colección de Amiibos de Nintendo, dis
 * **Clear Button Dinámico:** Icono X que aparece solo cuando hay texto escrito
 * **Flow Switching Reactivo:** Alternancia automática entre lista completa y búsqueda usando `flatMapLatest`
 
-### [SCREENSHOT: TextField de búsqueda en acción]
+<p align="center">
+  <img src="assets/Screenshot_text_field1.jpeg" width="300" alt="Local Search">
+  <img src="assets/Screenshot_text_field2.jpeg" width="300" alt="Local Search">
+</p>
 
 ### **Características Adicionales** 🚀
 * **Paginación Infinita:** Carga progresiva de datos con infinite scroll
@@ -50,7 +60,9 @@ Una aplicación completa para explorar la colección de Amiibos de Nintendo, dis
 * **Tamaño de Página Configurable:** Selector dropdown (20, 50, 100 items por página)
 * **Error de Paginación Inline:** Botón de reintentar al final de la lista sin perder items ya cargados
 
-### [SCREENSHOT: Paginación con error inline]
+<p align="center">
+  <img src="assets/Screenshot_Inline_Error.jpeg" width="300" alt="Paginacion Inline">
+</p>
 
 ---
 
@@ -132,3 +144,5 @@ app/src/main/java/com/curso/android/module3/amiibo/
 ---
 
 **Desarrollado como parte del Módulo 3 de Fundamentos Avanzados de Aplicaciones Móviles**
+
+Link del Video Explicativo: 
