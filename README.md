@@ -1,4 +1,4 @@
-📱 Android Studio Module 3: Amiibo Vault - Offline-First Architecture
+## 📱 Android Studio Module 3: Amiibo Vault - Offline-First Architecture
 
 Este repositorio contiene una aplicación de catálogo de Amiibos desarrollada con Kotlin y Jetpack Compose. El objetivo principal es demostrar el dominio de arquitecturas offline-first, gestión de estado reactivo, búsqueda local optimizada y manejo de errores de red.
 
