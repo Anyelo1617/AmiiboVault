@@ -145,4 +145,4 @@ app/src/main/java/com/curso/android/module3/amiibo/
 
 **Desarrollado como parte del Módulo 3 de Fundamentos Avanzados de Aplicaciones Móviles**
 
-Link del Video Explicativo: 
+Link del Video Explicativo: https://youtube.com/shorts/MWPsaK6n258?feature=share
